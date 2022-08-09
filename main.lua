@@ -1,5 +1,8 @@
--- Compass
--- TrailMakers Mod by dinoman/ticib 2021
+-- Compass Mod for Trailmakers, ticibi 2022
+-- name: Compass
+-- author: Thomas Bresee
+-- description: dynamic compass display in game ui
+
 
 local debug = false
 local globalTime = 0
