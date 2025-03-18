@@ -1,80 +1,103 @@
--- Compass Mod for Trailmakers, ticibi 2022
--- name: Compass
--- author: Thomas Bresee
--- description: dynamic compass display in game ui
+-- Compass Mod for Trailmakers
+-- Name: Compass
+-- Author: ticibi
+-- Version: 2.0 (2025 Update)
+-- Description: Dynamic compass display in game UI
 
+local Compass = {
+    DEBUG = false,
+    globalTime = 0,
+    COMPASS_PATTERN = "N....................E....................S....................W....................",
+    UI_IDS = {
+        HEADING = "heading",
+        COMPASS = "compass",
+        GLOBAL_TIME = "globaltime"
+    }
+}
 
-local debug = false
-local globalTime = 0
-local compass = "N....................E....................S....................W...................."
-
-function onPlayerJoined(player)
-    tm.os.Log(tm.players.GetPlayerName(player.playerId) .. " joined the server")
-    initializeUI(player.playerId)
+-- Player Event Handlers
+local function onPlayerJoined(player)
+    local playerName = tm.players.GetPlayerName(player.playerId)
+    tm.os.Log(playerName .. " joined the server")
+    Compass:initializeUI(player.playerId)
 end
 
-function onPlayerLeft(player)
-    tm.os.Log(tm.players.GetPlayerName(player.playerId) .. " left the server")
+local function onPlayerLeft(player)
+    local playerName = tm.players.GetPlayerName(player.playerId)
+    tm.os.Log(playerName .. " left the server")
 end
 
-function initializeUI(playerId)
-    homePage(playerId)
+-- Compass Class Methods
+function Compass:initializeUI(playerId)
+    tm.playerUI.ClearUI(playerId)
+    tm.playerUI.AddUILabel(playerId, self.UI_IDS.HEADING, "")
+    tm.playerUI.AddUILabel(playerId, self.UI_IDS.COMPASS, "")
+    if self.DEBUG then
+        tm.playerUI.AddUILabel(playerId, self.UI_IDS.GLOBAL_TIME, "")
+    end
 end
 
-tm.players.OnPlayerJoined.add(onPlayerJoined)
-tm.players.OnPlayerLeft.add(onPlayerLeft)
+function Compass:getSpacer(heading)
+    local headingInt = math.floor(heading)
+    if headingInt >= 100 then
+        return "                     "  -- 21 spaces
+    elseif headingInt >= 10 then
+        return "                      " -- 22 spaces
+    end
+    return "                       "     -- 23 spaces
+end
 
-function update()
+function Compass:updateCompass(playerId)
+    local transform = tm.players.GetPlayerTransform(playerId)
+    local rotation = transform.GetRotation()
+    local heading = rotation.y
+    local rate = 360 / #self.COMPASS_PATTERN
+    local hdgIndex = math.floor(heading / rate)
+    
+    -- Calculate display window
+    local minValue = math.max(1, hdgIndex - 20)
+    local maxValue = math.min(#self.COMPASS_PATTERN, hdgIndex + 22)
+    local displayText = ""
+    
+    -- Handle compass wrapping
+    if hdgIndex + 20 > #self.COMPASS_PATTERN then
+        local overflow = hdgIndex + 20 - #self.COMPASS_PATTERN
+        displayText = string.sub(self.COMPASS_PATTERN, minValue, #self.COMPASS_PATTERN) ..
+                     string.sub(self.COMPASS_PATTERN, 1, overflow)
+    elseif hdgIndex - 20 < 1 then
+        local underflow = math.abs(hdgIndex - 20)
+        displayText = string.sub(self.COMPASS_PATTERN, #self.COMPASS_PATTERN - underflow, #self.COMPASS_PATTERN) ..
+                     string.sub(self.COMPASS_PATTERN, 1, maxValue)
+    else
+        displayText = string.sub(self.COMPASS_PATTERN, minValue, maxValue)
+    end
+    
+    -- Update UI
+    tm.playerUI.SetUIValue(playerId, self.UI_IDS.HEADING, math.floor(heading))
+    tm.playerUI.SetUIValue(playerId, self.UI_IDS.COMPASS, displayText)
+end
+
+function Compass:update()
     local playerList = tm.players.CurrentPlayers()
     for _, player in pairs(playerList) do
-        updateCompass(player.playerId)
-        if debug then 
-            globalTime = globalTime + 1
-            tm.playerUI.SetUIValue(player.playerId, "globaltime", "time: " .. globalTime/10) 
+        self:updateCompass(player.playerId)
+        
+        if self.DEBUG then
+            self.globalTime = self.globalTime + 1
+            tm.playerUI.SetUIValue(
+                player.playerId,
+                self.UI_IDS.GLOBAL_TIME,
+                string.format("time: %.1f", self.globalTime / 10)
+            )
         end
     end
 end
 
-function updateCompass(playerId)
-    local transform = tm.players.GetPlayerTransform(playerId)
-    local rotation = transform.GetRotation()
-    local heading = rotation.y
-    local spacer = updateSpacer()
-    local rate = 360/#compass 
-    local hdgIndex = math.floor(heading / rate)
-    local minValue = hdgIndex - 20
-    local maxValue = hdgIndex + 22
-    local displayText = ""
-    if hdgIndex + 20 > #compass then
-        local diff = hdgIndex + 20 - (#compass)
-        local buffer = string.sub(compass, 1, diff)
-        displayText = string.sub(compass, minValue, #compass) .. buffer
-    elseif hdgIndex - 20 < 1 then
-        local diff = math.abs(hdgIndex - 20)
-        local buffer = string.sub(compass, #compass-diff, #compass)
-        displayText = buffer .. string.sub(compass, 1, maxValue)
-    else
-        displayText = string.sub(compass, minValue, maxValue)
-    end
-    tm.playerUI.SetUIValue(playerId, "heading", math.floor(heading))
-    tm.playerUI.SetUIValue(playerId, "compass", displayText)  
-end
+-- Event Registration
+tm.players.OnPlayerJoined.add(onPlayerJoined)
+tm.players.OnPlayerLeft.add(onPlayerLeft)
 
-function updateSpacer()
-    local spacer = ""
-    if math.floor(heading) > 9 and math.floor(heading) < 100 then
-        spacer = "                      "
-    elseif math.floor(heading) > 100 then
-        spacer = "                     "
-    else
-        spacer = "                       "
-    end
-    return spacer
-end
-
-function homePage(playerId)
-    tm.playerUI.ClearUI(playerId)
-    tm.playerUI.AddUILabel(playerId, "heading", "") 
-    tm.playerUI.AddUILabel(playerId, "compass", "") 
-    if debug then tm.playerUI.AddUILabel(playerId, "globaltime", "") end
+-- Main Update Loop
+function update()
+    Compass:update()
 end
